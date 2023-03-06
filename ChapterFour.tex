@@ -1,0 +1,308 @@
+\songti\xiaosi{
+\chapter{程序综合及烧录}
+\begin{spacing}{1.5}
+	\section{RTL级检查}
+	前面已经介绍过 RTL 级电路及其在 FPGA 设计中的作用，因此本实验针对 2 项任务首 先使用 RTL 级电路进行检验，检查电路各个模块之间的连接是否正常。由于这是我首次开 发 Xilinx 公司的 FPGA，结合之前在集创杯和 FPGA 竞赛中开发 Gowin、Robei 两家国产公 司 FPGA 的经验，不同厂家的综合器对于同样的程序综合出的电路也不一定相同，因此 RTL 级检查十分有必要，否则如果程序仿真正确，但是烧录板子时出现错误，仅从仿真层级将会 无从下手。同时，RTL 级检查也有助于我们后续分析综合器如何综合我们的程序，是否与 我们前面画出的预期电路连接相符合，如果不符合我们也可以根据 RTL 电路图的连接情况 进行修正。
+
+	Xilinx Vivado 软件的 RTL 分析检查的操作过程十分简单，在 Project Manager 中的 RTL Analysis 中有 Open Elaborated Design 选项，双击即可打开 RTL 设计图。在本次实验中，总的 RTL 级分析图如下所示:
+
+	\begin{figure}[htbp]
+		\centering
+		\includegraphics[width=1\textwidth]{figure/rtl.jpg}
+		\caption{Vivado 综合后的 RTL 连接图}\label{fig:rtl_con}
+	\end{figure}
+
+	图\ref{fig:rtl_con}即为在实际 FPGA 中我们的程序执行的电路连接图。将此图与前文中自己设想的连接图\ref{fig:rtl}进行对比，发现其内部模块的连接方式与设想图中的连接方式一致，DAC 和蓝牙 输出配置电平正常，输入输出管脚没有漏配的情况出现，因此总程序通过了 RTL 级检查。
+
+	\section{硬件管教配置以及综合}
+	硬件管脚配置是 FPGA 开发过程中十分重要的一部分，这一部分如果配置错误，将会 直接影响到后面的布线等过程，可能会导致布线错乱或者综合时被优化掉等问题。硬件配置 方法也较为简单，按照说明书对照引脚的标号即可完成，具体约束文件如下:
+	\begin{lstlisting}
+	## clk
+	set_property PACKAGE_PIN P17 [get_ports clk]
+	set_property IOSTANDARD LVCMOS33 [get_ports clk]
+	
+	## seg_flag
+	set_property PACKAGE_PIN G2 [get_ports {seg_flag[7]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {seg_flag[7]}]
+	set_property PACKAGE_PIN C2 [get_ports {seg_flag[6]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {seg_flag[6]}]
+	set_property PACKAGE_PIN C1 [get_ports {seg_flag[5]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {seg_flag[5]}]
+	set_property PACKAGE_PIN H1 [get_ports {seg_flag[4]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {seg_flag[4]}]
+	set_property PACKAGE_PIN G1 [get_ports {seg_flag[3]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {seg_flag[3]}]
+	set_property PACKAGE_PIN F1 [get_ports {seg_flag[2]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {seg_flag[2]}]
+	set_property PACKAGE_PIN E1 [get_ports {seg_flag[1]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {seg_flag[1]}]
+	set_property PACKAGE_PIN G6 [get_ports {seg_flag[0]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {seg_flag[0]}]
+	
+	## seg0
+	set_property PACKAGE_PIN B4 [get_ports {seg0[7]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {seg0[7]}]
+	set_property PACKAGE_PIN A4 [get_ports {seg0[6]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {seg0[6]}]
+	set_property PACKAGE_PIN A3 [get_ports {seg0[5]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {seg0[5]}]
+	set_property PACKAGE_PIN B1 [get_ports {seg0[4]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {seg0[4]}]
+	set_property PACKAGE_PIN A1 [get_ports {seg0[3]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {seg0[3]}]
+	set_property PACKAGE_PIN B3 [get_ports {seg0[2]}]
+	\end{lstlisting}
+	\begin{lstlisting}
+	set_property IOSTANDARD LVCMOS33 [get_ports {seg0[2]}]
+	set_property PACKAGE_PIN B2 [get_ports {seg0[1]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {seg0[1]}]
+	set_property PACKAGE_PIN D5 [get_ports {seg0[0]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {seg0[0]}]
+	
+	# seg1
+	set_property PACKAGE_PIN D4 [get_ports {seg1[7]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {seg1[7]}]
+	set_property PACKAGE_PIN E3 [get_ports {seg1[6]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {seg1[6]}]
+	set_property PACKAGE_PIN D3 [get_ports {seg1[5]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {seg1[5]}]
+	set_property PACKAGE_PIN F4 [get_ports {seg1[4]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {seg1[4]}]
+	set_property PACKAGE_PIN F3 [get_ports {seg1[3]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {seg1[3]}]
+	set_property PACKAGE_PIN E2 [get_ports {seg1[2]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {seg1[2]}]
+	set_property PACKAGE_PIN D2 [get_ports {seg1[1]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {seg1[1]}]
+	set_property PACKAGE_PIN H2 [get_ports {seg1[0]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {seg1[0]}]
+	
+	## button
+	set_property PACKAGE_PIN U4 [get_ports {btn_in[4]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {btn_in[4]}]
+	set_property PACKAGE_PIN V1 [get_ports {btn_in[3]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {btn_in[3]}]
+	set_property PACKAGE_PIN R15 [get_ports {btn_in[2]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {btn_in[2]}]
+	set_property PACKAGE_PIN R17 [get_ports {btn_in[1]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {btn_in[1]}]
+	set_property PACKAGE_PIN R11 [get_ports {btn_in[0]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {btn_in[0]}]
+	\end{lstlisting}
+	\begin{lstlisting}
+	
+	## reset button
+	set_property PACKAGE_PIN P15 [get_ports {btn_in[5]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {btn_in[5]}]
+	
+	## LED0 left
+	set_property PACKAGE_PIN F6 [get_ports {LED0[7]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {LED0[7]}]
+	set_property PACKAGE_PIN G4 [get_ports {LED0[6]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {LED0[6]}]
+	set_property PACKAGE_PIN G3 [get_ports {LED0[5]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {LED0[5]}]
+	set_property PACKAGE_PIN J4 [get_ports {LED0[4]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {LED0[4]}]
+	set_property PACKAGE_PIN H4 [get_ports {LED0[3]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {LED0[3]}]
+	set_property PACKAGE_PIN J3 [get_ports {LED0[2]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {LED0[2]}]
+	set_property PACKAGE_PIN J2 [get_ports {LED0[1]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {LED0[1]}]
+	set_property PACKAGE_PIN K2 [get_ports {LED0[0]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {LED0[0]}]
+	
+	## LED1 right
+	set_property PACKAGE_PIN K1 [get_ports {LED1[7]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {LED1[7]}]
+	set_property PACKAGE_PIN H6 [get_ports {LED1[6]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {LED1[6]}]
+	set_property PACKAGE_PIN H5 [get_ports {LED1[5]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {LED1[5]}]
+	set_property PACKAGE_PIN J5 [get_ports {LED1[4]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {LED1[4]}]
+	set_property PACKAGE_PIN K6 [get_ports {LED1[3]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {LED1[3]}]
+	set_property PACKAGE_PIN L1 [get_ports {LED1[2]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {LED1[2]}]
+	\end{lstlisting}
+	\begin{lstlisting}
+	set_property PACKAGE_PIN M1 [get_ports {LED1[1]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {LED1[1]}]
+	set_property PACKAGE_PIN K3 [get_ports {LED1[0]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {LED1[0]}]
+	
+	## switch
+	set_property PACKAGE_PIN R1 [get_ports {switch[7]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {switch[7]}]
+	set_property PACKAGE_PIN N4 [get_ports {switch[6]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {switch[6]}]
+	set_property PACKAGE_PIN M4 [get_ports {switch[5]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {switch[5]}]
+	set_property PACKAGE_PIN R2 [get_ports {switch[4]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {switch[4]}]
+	set_property PACKAGE_PIN P2 [get_ports {switch[3]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {switch[3]}]
+	set_property PACKAGE_PIN P3 [get_ports {switch[2]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {switch[2]}]
+	set_property PACKAGE_PIN P4 [get_ports {switch[1]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {switch[1]}]
+	set_property PACKAGE_PIN P5 [get_ports {switch[0]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {switch[0]}]
+	
+	## ADC config
+	set_property PACKAGE_PIN R5 [get_ports {DAC_ILE}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {DAC_ILE}]
+	set_property PACKAGE_PIN N6 [get_ports {DAC_CS}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {DAC_CS}]
+	set_property PACKAGE_PIN V6 [get_ports {DAC_WR1}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {DAC_WR1}]
+	set_property PACKAGE_PIN R6 [get_ports {DAC_WR2}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {DAC_WR2}]
+	set_property PACKAGE_PIN V7 [get_ports {DAC_XFER}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {DAC_XFER}]
+	
+	## ADC data
+	\end{lstlisting}
+	\begin{lstlisting}
+	set_property PACKAGE_PIN U9 [get_ports {toDAC[7]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {toDAC[7]}]
+	set_property PACKAGE_PIN V9 [get_ports {toDAC[6]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {toDAC[6]}]
+	set_property PACKAGE_PIN U7 [get_ports {toDAC[5]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {toDAC[5]}]
+	set_property PACKAGE_PIN U6 [get_ports {toDAC[4]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {toDAC[4]}]
+	set_property PACKAGE_PIN R7 [get_ports {toDAC[3]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {toDAC[3]}]
+	set_property PACKAGE_PIN T6 [get_ports {toDAC[2]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {toDAC[2]}]
+	set_property PACKAGE_PIN R8 [get_ports {toDAC[1]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {toDAC[1]}]
+	set_property PACKAGE_PIN T8 [get_ports {toDAC[0]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {toDAC[0]}]
+	
+	## bluetooth
+	set_property PACKAGE_PIN N2 [get_ports {butx}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {butx}]
+	set_property PACKAGE_PIN L3 [get_ports {burx}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {burx}]
+	set_property PACKAGE_PIN D18 [get_ports {bt_pw}]
+	set_property PACKAGE_PIN M2 [get_ports {bt_rst}]
+	set_property PACKAGE_PIN E18 [get_ports {bt_sw}]
+	set_property PACKAGE_PIN H15 [get_ports {bt_sw_hw}]
+	set_property PACKAGE_PIN C16 [get_ports {bt_master}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {bt_master}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {bt_pw}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {bt_rst}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {bt_sw}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {bt_sw_hw}]
+	
+	## serial
+	set_property PACKAGE_PIN T4 [get_ports {sutx}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {sutx}]
+	\end{lstlisting}
+	\begin{lstlisting}
+	set_property PACKAGE_PIN N5 [get_ports {surx}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {surx}]
+	\end{lstlisting}
+
+	\section{烧录结果}
+	进行完上述过程后，后面将会执行 implementation 和生成比特流文件的过程， implementation 过程包括布线等步骤，比特流文件将会作为直接烧录到板子的文件。
+
+	经过上面过程，将程序烧录到板子后，最终结果如下所示:
+	\newline
+	\begin{figure}[htbp]
+		\centering
+		\begin{minipage}{0.49\linewidth}
+			\centering
+			\includegraphics[width=0.95\linewidth]{figure/sin.jpg}
+			\caption{正弦波输出}
+			\label{sin}
+		\end{minipage}
+		%\qquad
+		\begin{minipage}{0.49\linewidth}
+			\centering
+			\includegraphics[width=0.95\linewidth]{figure/squ.jpg}
+			\caption{方波输出}
+			\label{squ}
+		\end{minipage}
+	\end{figure}
+	\newline
+	\vspace{1cm}
+	\begin{figure}[htbp]
+		\centering
+		\begin{minipage}{0.49\linewidth}
+			\centering
+			\includegraphics[width=0.95\linewidth]{figure/saw.jpg}
+			\caption{锯齿波输出}
+			\label{saw}
+		\end{minipage}
+		%\qquad
+		\begin{minipage}{0.49\linewidth}
+			\centering
+			\includegraphics[width=0.95\linewidth]{figure/tri.jpg}
+			\caption{三角波输出}
+			\label{tri}
+		\end{minipage}
+	\end{figure}
+
+	\begin{figure}[htbp]
+		\centering
+		\begin{minipage}{0.49\linewidth}
+			\centering
+			\includegraphics[width=0.95\linewidth]{figure/num_disp.jpeg}
+			\caption{学号显示}
+			\label{numdisp}
+		\end{minipage}
+		%\qquad
+		\begin{minipage}{0.49\linewidth}
+			\centering
+			\includegraphics[width=0.95\linewidth]{figure/num_adj.jpeg}
+			\caption{学号调整}
+			\label{numadj}
+		\end{minipage}
+	\end{figure}
+
+	\begin{figure}[htbp]
+		\centering
+		\includegraphics[width=0.5\textwidth]{figure/freq_disp.jpeg}
+		\caption{实际与理论频率显示}\label{fig:freq_disp}
+	\end{figure}
+
+	\begin{figure}[htbp]
+		\centering
+		\begin{minipage}{0.25\linewidth}
+			\centering
+			\includegraphics[width=0.95\linewidth]{figure/bt_resp.png}
+			\caption{蓝牙发送与接收}
+			\label{btresp}
+		\end{minipage}
+		%\qquad
+		\begin{minipage}{0.73\linewidth}
+			\centering
+			\includegraphics[width=0.95\linewidth]{figure/bt_disp.jpeg}
+			\caption{蓝牙字符串显示}
+			\label{btdisp}
+		\end{minipage}
+	\end{figure}
+	\newpage
+	\begin{figure}[h!]
+		\centering
+		\begin{minipage}{0.49\linewidth}
+			\centering
+			\includegraphics[width=0.95\linewidth]{figure/s_resp.jpg}
+			\caption{串口发送与接收}
+			\label{sresp}
+		\end{minipage}
+		%\qquad
+		\begin{minipage}{0.49\linewidth}
+			\centering
+			\includegraphics[width=0.95\linewidth]{figure/s_disp.jpeg}
+			\caption{蓝牙字符串显示}
+			\label{sdisp}
+		\end{minipage}
+	\end{figure}
+\end{spacing}
+}

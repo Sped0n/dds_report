@@ -1,0 +1,126 @@
+\songti\xiaosi{
+\chapter{方案整体性论述}
+\begin{spacing}{1.5}
+	\section{DDS 组成及相关工作原理介绍}
+		\subsection{DDS工作原理}
+			DDS 通常由频率控制字寄存器(Frequency Control Register)， 参考时钟(Reference Oscillator)，波形处理模
+			块NCO(在本设计中包括波形存储器和累加器)，D/A 转换器(DAC)，低通滤波器(LPF)组成。其结构如下图所示：
+			\newline
+			\begin{figure}[htbp]
+				\centering
+				\includegraphics [width=0.75\textwidth]{figure/dds_stru.jpg}
+				\caption{DDS结构}\label{fig:dds_stru}
+			\end{figure}
+
+			下面介绍DDS组成中每一个部分的功能：
+			\begin{enumerate}
+				\item \textbf{频率控制字寄存器}\\
+					实现频率控制字的存储，可以通过外部的逻辑结构改变其的值，其中$N$被称为相位增量，也叫做频率控制字。
+				\item \textbf{参考时钟}\\
+					为模块提供参考时钟。
+				\item \textbf{累加器}\\
+					为波形存储器提供地址变量，地址变量经过全译码可以得到 ROM 字线。
+				\item \textbf{波形存储器}\\
+					进行波形的相位—幅值转换。
+				\item \textbf{D/A转换器}\\
+					将 ROM 输出的二进制数转换为与二进制数值成比例的电压量。
+				\item \textbf{低通滤波器}\\
+					滤除生成的阶梯形正弦波中的高频成分将其变为光滑的正弦波。
+			\end{enumerate}
+
+			DDS 的整体工作原理如下:
+
+			在参考时钟$f_c$的作用下，N 位累加器 ADDER 对频率控制字进行线性累加，当累加器积满量时就会产生一次溢出，溢出的频率就是 DDS 的信号频率，同时累加器的输出会送到ROM中进行转换，ROM输出的量经过DAC后变为模拟的阶梯波电压，阶梯波电压经过低通
+			滤波器LPF后可以得到光滑的正弦波信号。当取不同的频率控制字时，将导致累加器的增量不同，最终输出的正弦波频率就不同。
+
+			DDS输出频率的计算公式为:
+			\begin{equation}
+				f_{out}=\frac{K}{2^N}\cdot f_c
+			\end{equation}
+
+		\subsection{AM调制原理}
+			通信理论中将信号调制定义为调幅信号对载波的幅度，频率和相位的变换，AM 即标准 调制信号，除了来自消息的基带信号外，还包含了直流信号，它是调制后输出信号既含载波 分量又含有边带分量的标准调幅信号。
+
+			在标准幅度调频器中，设载波信号$V_c(t)$为：
+			\begin{equation}
+				V_c(t)=V_{cm}\cos{\omega_c t}
+			\end{equation}
+
+			调制信号$V_f(t)$为：
+			\begin{equation}
+				V_f(t)=V_{\Omega m}\cos{\Omega t}
+			\end{equation}
+
+			则标准调幅波信号$V_{AM}(t)$为：
+			\begin{equation}
+				V_{AM}(t)=[V_{cm}+V_f]\cos{\omega_c t}=(1+m_A\cos{\Omega t})\cos{\omega_c t}
+			\end{equation}
+	\section{UART工作原理}
+		UART是通用异步收发器（Universal Asynchronous Receiver/Transmitter）的简称，也是我们常说的串口，在FPGA应用中常用作与PC机通信的接口。
+		\newline
+		\begin{figure}[htbp]
+			\centering
+			\includegraphics [width=0.5\textwidth]{figure/uart_connection.jpg}
+			\caption{UART接口连接}\label{fig:uart_connection}
+		\end{figure}
+
+		和IIC与SPI相比，UART就要简单许多了，最基础的UART协议只有两根线，发送端TX和接收端RX。\textbf{UART是单主单从的全双工通信协议}，只有两台设备直接相连，其实UART也没有主从的区别，两台设备都可以接收数据和发送数据，没有主机的操控和读写区别。\textbf{在TX发送数据的同时，RX也可以接收数据，并且收发可以以不同的波特率收发数据}。常见的串行通信协议中，\textbf{IIC是半双工多主多从通信协议}，\textbf{SPI是全双工的单主多从的通信协议}。
+
+		UART和IIC与SPI最主要的却别在于，后两者是同步通信协议，主线上存在同步时钟线。\textbf{而UART是异步串行通信协议}，异步指的是发送端和接收端没有同步时钟线相连，发送端按某种速率恒定地发送数据，接收端也按照某种恒定的速率接收数据。所以接收端和发送端要按照相同的速率收发数据，否则数据就会乱掉。
+		\subsection{波特率}
+			之前说过收发都以某个恒定的频率进行收发数据，这个恒定的频率就是波特率。波特率表示每秒钟传送的码元符号的个数，它是对码元传输速率的一种度量，它用单位时间内载波调制状态改变的次数来表示，1波特即指每秒传输1个码元。在数字传输过程中码元
+			是最基础的单位，如果每个码元只有两个状态，即0或1，则1码元和1bit相同，1波特率等于1比特率。如果每个码元由四个状态，即00，01，10，11，则1波特率等于2比特率，是二倍的关系。在UART协议中，每个码元就只有两种状态，所以可以理解为时钟的
+			频率，每个时钟周期内传输一个bit数据。\textbf{常用的波特率有600，1200，2400，4800，9600，19200和38400，在UART中理解为时钟周期即可}。
+
+		\subsection{传输格式}
+			既然UART是异步通信，没有同步时钟，虽然可以通过相同的波特率来接收，但是收发模块内的波特率也会有相位差，那么就需要一个在传输数据中有start和stop标志来做波特率的同步，然后再在中间发送需要发送的数据。数据位可以为5，6，7，8，9位，常用的形式还是一个byte（8bit数据位）。值得注意的是，UART协议中的数据位是LSB模式，即低位先发，高位后发，这与IIC与SPI是不同的，在编写代码的时候要注意。
+			\newline
+			\begin{figure}[htbp]
+				\centering
+				\includegraphics [width=0.85\textwidth]{figure/uart_stru.jpg}
+				\caption{UART传输数据组成}\label{fig:uart_stru}
+			\end{figure}
+
+		\subsection{校验位}
+			数据位之后的1bit为校验位，校验位有五种模式：无校验、奇校验、偶校验、始终为0、始终为1。奇偶校验是数据通信中常用的校验模式，可以简便地校验数据是否出错，\textbf{但是只知道数据是否出错，却不能纠正数据}。奇校验指的是，加上校验位，共有奇数个1，偶校验指的是，加上校验位共有偶数个1。可以把所有数据位加起来，观察结果是奇数还是偶数来确定数据中1的个数，\textbf{也可以用按位异或的方法快速判断}。
+
+		\subsection{start和stop的产生}
+			UART协议中起始位和结束位的产生与IIC协议有些相似，TX线在无数据传输的时候，\textbf{始终为高电平，有数据要传的时候，把TX拉低，即产生了start标志，结束位为高电平}。结束位和开始位都可以做同步指示，有些时候结束位可以为1.5或2个周期的高电平，可以更有效地做波特率同步，但会降低传输速率。
+
+			UART协议还有很多补充，比如RS232,RS422,RS485等，这些补充协议的基本通讯机理是与UART一致的，只不过在物理层上做了改变，在接口处多了一个接地线。这些补充协议可以加强UART的远距离通信能力和抗干扰能力。
+	\section{实验总体方案}
+		\subsection{实验计划使用模块的确定}
+			\begin{enumerate}
+				\item \textbf{分频模块}\\
+					因为在实验中需要用到多种不同频率的时钟，为了代码和模块的简洁性，将分频模块独立出来为不同模块提供特定时钟频率。
+				\item \textbf{累加器和波形生成模块}\\
+					结合实验要求和 DDS 原理，我们需要以分频器分频后的频率作为控制时钟来控制累加器模块，累加器模块经过累加输出地址传递给能够产生波形的 ROM，从而实现 4 种波形的输出。
+				\item \textbf{波形选择输出模块}\\
+					产生了四种波形，我们必须要做到一个有选择输出，否则将会出现波形混叠现象或者无法输出波形，因此这里计划使用类似数据选择器的形式来控制波形的输出。
+				\item \textbf{测频模块}\\
+					根据实验要求，我们需要对产生的波形进行测频，因此我们对于测频功能需要一个专门的模块。
+				\item \textbf{频率理论值计算模块}\\
+					根据实验要求，我们需要根据频率控制字来计算理论值并且进行显示，为使各个模块 功能清晰，不发生混淆，因此单独把理论值测量放在一个模块中，这一设计方法将会在出现 问题时一目了然。
+				\item \textbf{显示模块}\\
+					显示模块作用为把理论值和实际值显示在数码管上，因此该模块将只进行显示功能， 不会附加计算功能，防止功能错乱找不到问题。
+				\item \textbf{按键输入模块}\\
+					集成了基于移位寄存器的按键防抖模块，将输入控制模块独立出来防止模块过度耦合，方便进行bug的查找。
+				\item \textbf{AM调制模块}\\
+					AM 调制的模块与 DDS 类似，由于原理上的欠缺，因此我只能检验正弦波的波形是否正确，大致分为如下模块: 载波和调制波的信号产生模块，乘法器模块，顶层输出模块。三者的设计都是基于前面阐述 的 AM 调制原理，因此这里不再赘述。
+				\item \textbf{UART接收发送模块}\\
+					集成了UART数据的发送与接收，所有的设计均基于上面提到的原理，这里不再赘述。
+				\item \textbf{总逻辑模块}\\
+					与各个功能模块相连，负责逻辑功能的实现。
+			\end{enumerate}
+		\subsection{实验RTL级设计图}
+			RTL 级(Register Transfer Level)描述又称为直接寄存器级描述，这一级设计旨在 画出各个电路之间的输入输出和连接方式，不考虑电路的内部结构，常用于 FPGA 设计的初 步构
+			思过程中，用于检验 FPGA 设计的复杂程度以及作为后续若程序烧入开发板后检查故障 的对照标准。本实验涉及模块较多，因此我在实验开始前绘制了该实验的 RTL 级电路图，便 于后续出现故障时进行排查。
+			\newline
+			\begin{figure}[htbp]
+				\centering
+				\includegraphics [width=0.975\textwidth]{figure/rtl.jpg}
+				\caption{RTL级设计图}\label{fig:rtl}
+			\end{figure}
+
+			上述 RTL 级电路是在理想情况下设计的，后面在具体设计的过程中将会以此为依据，根据板卡配置进行调整。
+\end{spacing}}

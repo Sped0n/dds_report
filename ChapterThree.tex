@@ -1,0 +1,1508 @@
+\songti\xiaosi{
+\chapter{各子模块功能的编写}
+\begin{spacing}{1.5}
+    \section{DDS子模块的编写}
+        \subsection{分频模块的编写}
+            分频模块的作用为把系统时钟按照一定的比例进行缩小，在数字逻辑电路中主要实现 的元件为 D 触发器，在实际设计中常用 PLL 锁相环 IP 核来实现。本次设计中，根据课程要 求，我们只需要获得 10KHz 、 0.5Hz 、50Hz 和 100Hz 的时钟，若使用 PLL 锁相环未免有些大材小用，同时 还会给系统增加负担，减慢综合器运行速度，因此我采用直接书写模块的方式进行实现。编 程的思路大致如下:
+
+            首先计算出分频后要求的时钟的周期，然后将这一周期与系统时钟的周期对比，计算 系统时钟到达多少次上升沿或下降沿可以达到分频时钟要求的周期。比如，想要得到 10kHz 的时钟，那么我们就要计算在 100MHz 时钟的作用下有多少个上升或下降沿通过，计算后， 是 10000 个，然后需要将 10000 除以 2 再减去 1 作为变化的指标，当 100MHz 产生的时钟 上升沿数量到达这个数值时，输出时钟就会在原来初始值的基础上翻转一次，从而通过计数 的方式实现分频功能，这一方法相比于 PLL 锁相环可以加快综合速度，相比于 D 触发器级 联可以减少复杂度，因此较为合理。0.5Hz 时钟产生的方法同理。因此我们可以使用上面的 方法来编写分频程序，具体程序如下:
+			\begin{lstlisting}[language=Verilog]
+            module divclk(
+                input clk,
+                output reg out_clk1,
+                output reg out_clk2,
+                output reg out_clk3,
+                output reg out_clk4
+                );
+            
+                reg[31:0] out_clk1_cnt = 0;
+                reg[31:0] out_clk2_cnt = 0;
+                reg[31:0] out_clk3_cnt = 0;
+                reg[31:0] out_clk4_cnt = 0;
+
+                initial
+			\end{lstlisting}
+			\begin{lstlisting}[language=Verilog]
+                begin
+                    out_clk1 = 0;
+                    out_clk2 = 0;
+                    out_clk3 = 0;
+                    out_clk4 = 0;
+                end
+            
+                parameter div_1ms = 49999;
+                parameter div_20ms = 999999;
+                parameter div_10khz = 4999;
+                parameter div_05hz = 99999999;
+                // 1ms clock
+                always@(posedge clk)
+                begin
+                    out_clk1_cnt <= out_clk1_cnt + 1;
+                    if (out_clk1_cnt == div_1ms)
+                    begin
+                        out_clk1 <= ~out_clk1;
+                        out_clk1_cnt <= 0;
+                    end
+                end
+                // 20ms clock
+                always@(posedge clk)
+                begin
+                    out_clk2_cnt <= out_clk2_cnt + 1;
+                    if (out_clk2_cnt == div_20ms) 
+                    begin
+                    out_clk2 <= ~out_clk2;
+                    out_clk2_cnt <= 0;
+                    end
+                end
+                // 10kHz clock
+                always@(posedge clk)
+                begin
+                    out_clk3_cnt <= out_clk3_cnt + 1;
+			\end{lstlisting}
+			\begin{lstlisting}[language=Verilog]
+                    if (out_clk3_cnt == div_10khz) 
+                    begin
+                    out_clk3 <= ~out_clk3;
+                    out_clk3_cnt <= 0;
+                    end
+                end
+                // 0.5Hz clock
+                always@(posedge clk)
+                begin
+                    out_clk4_cnt <= out_clk4_cnt + 1;
+                    if (out_clk4_cnt == div_05hz) 
+                    begin
+                    out_clk4 <= ~out_clk4;
+                    out_clk4_cnt <= 0;
+                    end
+                end
+                endmodule
+            \end{lstlisting}
+			将上面程序使用 Xilinx Vivado 软件进行仿真结果如下所示:
+			\newline
+			\begin{figure}[htbp]
+				\centering
+				\includegraphics[width=0.91\textwidth]{figure/divclk_sim.jpg}
+				\caption{分频模块仿真(因系统原因，无法直接仿真 0.5Hz 时钟，后使用比例控制的方法验证，时钟正常)}\label{fig:divclk_sim}
+			\end{figure}
+			\newpage
+			仿真结果与预想结果一致，可以实现分频功能。
+		\subsection{累加和波形产生模块的编写}
+			累加器的作用是为最后产生的波形提供地址变量，同时频率控制字也将会在此发挥作 用，最后累加的值在频率控制字为 0 时，累加 1，在频率控制字非 0 时，直接累加频率控制 字。因此从而实现累加功能，当累加器累加满时，就会产生溢出，即完成一个信号周期。频 率控制字的作用就是用来控制累加器加到满的速度。
+
+			针对波形的产生，我们首先需要一个时钟来作为控制，同时前面累加单元累加的地址 也要作为输入来控制波形的频率，最后输出一个波形，由于波形的产生使用 Verilog HDL 语 言直接编写难度较大，因此这里直接使用 IP 核来用作波形生成器。IP 核采用 ROM，2 端口 输入，分别作为时钟输入和地址输入，输出端口用于输出波形的值。ROM 中的内容即为不 同波形所对应的值，这些值将存在一个 coe 文件中，便于读取。结合板卡 D/A 转换模块的 特点，生成的 coe 文件宽度为 12，深度为 4096，该模块中涉及累加、波形产生共计 5 个子模 块，其整体构架如下图所示:
+			\newline
+			\begin{figure}[htbp]
+				\centering
+				\includegraphics[width=0.95\textwidth]{figure/adder_rtl.jpg}
+				\caption{累加器单元内部结构图}\label{fig:adder_rtl}
+			\end{figure}
+
+			从上图中我们可以看出，累加器和波形产生模块外部只需要 2 个输入，4 个输出，内部则需要我们自己编程调用 IP 核来实现连接，这也充分体现了 FPGA 设计中模块化设计的 思想与 Verilog HDL 语言侧重描述性的特点。
+
+			根据上面的介绍和原理，我们根据上方图形来进行程序的编写。具体程序如下:
+			\newpage
+			\begin{lstlisting}[language=Verilog]
+			module full_adder(
+				input clk,
+				input[11:0] freq_ctl,
+				output[7:0] sine_wave,
+				output[7:0] square_wave,
+				output[7:0] triangle_wave,
+				output[7:0] sawtooth_wave
+				);
+
+				reg[11:0] addr;
+
+				initial
+				begin
+					addr <= 12'd0;
+				end
+
+				always@(posedge clk)
+				begin
+					addr <= addr + freq_ctl;
+				end
+
+				sine_rom sine(
+					.a(addr),
+					.clk(clk),
+					.spo(sine_wave)
+				);
+				square_rom square(
+					.a(addr),
+					.clk(clk),
+					.spo(square_wave)
+				);
+				triangle_rom triangle(
+					.a(addr),
+					.clk(clk),
+			\end{lstlisting}
+			\begin{lstlisting}[language=Verilog]
+					.spo(triangle_wave)
+				);
+				sawtooth_rom sawtooth(
+					.a(addr),
+					.clk(clk),
+					.spo(sawtooth_wave)
+				);
+			endmodule
+			\end{lstlisting}
+
+			将上面的 Verilog HDL 代码配合 coe 文件使用 Xilinx Vivado 软件进行仿真，得到如下所示波形图:
+			\newline
+			\begin{figure}[htbp]
+				\centering
+				\includegraphics[width=0.95\textwidth]{figure/adder_sim.jpg}
+				\caption{仿真后输出的波形(方波在仿真时输出三角，属于正常现象)}\label{fig:adder_sim}
+			\end{figure}
+
+			从上方波形图可以看出，模块工作正常(锯齿波因 coe 文件原因仿真时会出现三角波)，
+			可以产生我们需要的波形。
+		\subsection{波形输出模块的编写}
+			从第二部分的分析中，显然 4 种波形不能同时输出到 D/A 模块中，因此我们需要编写
+			一个选择模块来对前面累加和波形输出模块输出的 4 种波形进行输出，选择模块的特征与数字逻辑电路中的数据选择器十分相似，但是与之不同的是，这里选择的有效状态将仅有 4 个。根据板卡的硬件配置，这里我们采用 4 个开关来进行控制，设开关打开时值为 1，关闭 时值为 0，控制的具体情况如下表:
+			{\wuhao\songti
+				\begin{table}[htb]
+					\begin{center}
+						\topcaption{开关值与输出波形的对应关系}
+						\begin{tabular}{m{6cm} m{5cm}}
+							\bottomrule
+							一组开关值（两位） & 对应波形\\
+							\hline
+							00 & 正弦波 \\
+							01 & 方波 \\
+							10 & 三角波 \\
+							11 & 锯齿波 \\
+							\bottomrule
+						\end{tabular}
+					\end{center}
+			\end{table}}
+			从上表中可以看出，一种开关状态将会对应一个波形输出状态，如果我们把波形看作数据输入，开关的值看作查找值，这一设计就类似于一个查找表(LUT)，而 FPGA 是十分 擅长此类运算的，因此这一设计将会十分好地发挥 FPGA 的性能。
+
+			根据上面的设计方案编写程序，具体程序如下所示:
+			\begin{lstlisting}[language=Verilog]
+			module wave_out(
+				input clk, //10khz clock
+				input[1:0] wave_selector,
+				input[11:0] freq_ctl,
+				output reg[7:0] output_wave
+				);
+			
+				wire[7:0] sin_input;
+				wire[7:0] squ_input;
+				wire[7:0] tri_input;
+				wire[7:0] saw_input;
+			
+				full_adder full_adder_embed(
+					.clk(clk),
+					.freq_ctl(freq_ctl),
+					.sine_wave(sin_input),
+					.square_wave(squ_input),
+					.triangle_wave(tri_input),
+					.sawtooth_wave(saw_input)
+					);
+
+			\end{lstlisting}
+			\begin{lstlisting}[language=Verilog]
+				always@(posedge clk)
+				begin
+					case(wave_selector)
+						2'd0: output_wave <= sin_input;
+						2'd1: output_wave <= squ_input;
+						2'd2: output_wave <= tri_input;
+						2'd3: output_wave <= saw_input;
+					endcase
+				end
+			endmodule
+			\end{lstlisting}
+
+			仿真程序如下所示：
+			\begin{lstlisting}[language=Verilog]
+			module wave_out_sim;
+			reg[11:0] ctl;
+			reg[1:0] select;
+			wire[7:0] out;
+			
+			initial
+			begin
+				select = 2'b11;
+				ctl = 12'd4;
+			end
+			// clockgen 10khz
+				reg clk = 0;
+				parameter period_clk = 10000;
+				always
+				begin
+					#(period_clk/2) clk <= 1'b0;
+					#(period_clk/2) clk <= 1'b1;
+				end
+			wave_out wave_out_tb(
+				.clk(clk),
+				.wave_selector(select),
+			\end{lstlisting}
+			\begin{lstlisting}[language=Verilog]
+				.freq_ctl(ctl),
+				.output_wave(out)
+				);
+			endmodule
+			\end{lstlisting}
+
+			这里详细说明一下仿真模块程序的编写，由于 IP 核在仿真时相对耗费时间，且仿真 时想要看到波形只能将前面的累加器模块调用到波形输出模块中，因此这里我没 有采用直接仿真的方法，而是把前面的波形用特殊值代替，后通过 keys 来观察最后的输出值，这样的仿真方法不破坏源程序，而且速度快且便于检查问题，并且可 以直达本质来验证该模块的选择功能。
+
+			利用 Xilinx Vivado 软件与前面得累加器和波形输出模块配合仿真，可以得到如下图所示的仿真波形:
+			\newline
+			\begin{figure}[htbp]
+				\centering
+				\includegraphics[width=1\textwidth]{figure/wave_out_sim.jpg}
+				\caption{选择模块仿真输出波形}\label{fig:wave_out_sim}
+			\end{figure}
+
+			结合仿真波形图，我们可以看到，开关可以有效地控制波形的输出，且前面产生的 4种波形可以正常输出，程序有效。
+		\subsection{理论频率值计算模块的编写}
+			输出信号频率的理论值$f_{the}$仅和频率控制字$K$和时钟频率大小$f$，以及 ROM 的深度$D$有关系，三者关系可以使用如下表达式进行描述:
+
+			\begin{equation}
+				f_{the}=\frac{K}{D}\cdot f
+			\end{equation}
+			因此理论值计算模块的计算功能较为简单，只需要 2 个输入和一个表达式即可确定(ROM 深度为固定值)，为防止后续模块
+			工作量变大，我在这一模块中加入了分位输出功能， 即把理论值按照个、十、百、千位进行输出，计算各位的数值时将采
+			用求余算法分别获取各 个数位上的数值，这一算法也是编程时分离各个数位的常用方法。所以理论值计算模块有 2 个
+			输入，4 个输出，其组成内部结构图如下所示:
+			\newline
+			\begin{figure}[htbp]
+				\centering
+				\includegraphics[width=0.95\textwidth]{figure/the_freq_rtl.jpg}
+				\caption{理论频率值计算模块内部结构}\label{fig:the_freq_rtl}
+			\end{figure}
+
+			根据上面的设计方案编写程序，具体程序如下所示:
+			\begin{lstlisting}[language=Verilog]
+			module theory_freq(
+				input clk,
+				input[11:0] freq_ctl,
+				output reg[3:0] thou_count,
+				output reg[3:0] hund_count,
+				output reg[3:0] ten_count,
+				output reg[3:0] one_count
+				);
+				reg[26:0] theo_freq;
+
+				always@(posedge clk)
+				begin
+					theo_freq <= freq_ctl * 10000 / 4096;
+					one_count <= theo_freq % 10;
+			\end{lstlisting}
+			\begin{lstlisting}[language=Verilog]
+					ten_count <= theo_freq / 10 % 10;
+					hund_count <= theo_freq / 100 % 10;
+					thou_count <= theo_freq / 1000;
+				end
+			endmodule
+			\end{lstlisting}
+
+			利用 Xilinx Vivado 软件人为操控频率控制字和时钟进行仿真，可以得到如下图所示的仿真波形:
+			\newline
+			\begin{figure}[htbp]
+				\centering
+				\includegraphics[width=0.95\textwidth]{figure/the_freq_sim.jpg}
+				\caption{理论频率测量模块的仿真波形}\label{fig:the_freq_sim}
+			\end{figure}
+
+			从上面的仿真图形可以看出，理论测量值准确，因此推断该模块功能运行正常，后续可以使用。
+		\subsection{测频模块程序的书写}
+			测频就是测出产生信号的频率，但是我们的信号最后的输出值为 0-255 或 0-127，甚 至在后续还会有其他数值，因此输出为模拟信号值。所以想要测量信号的频率，我们必须要 从模拟信号中找到关键突变点，根据突变点来制定方案。在本次实验中，我先后采用了 3 种突变点来测量信号的频率，具体如下:
+			\begin{enumerate}
+				\item 利用 1 秒内信号的最高点出现的次数来测量频率。
+				\item 利用中间数值将信号转换为时钟脉冲信号，通过 1 秒钟内整形后的信号通过的 数量来测量时钟的频率，原理类似于滞回比较器。
+				\item 利用 1 秒内输出信号最高位的变化来测量频率。
+			\end{enumerate}
+			在实验中我综合比较了上述三种方案的优劣。第一种方案利用最高点，结合 coe 文件， 最高点可能是 255 也可能是 127，但是结果经过仿真时发现，每次实验最高点的数值不一定 相同，后将最高点范围小幅度扩大，情况也未见改善，所以第一种方案在实际应用中不可行。 第二种方案在第一种方案的基础上作了改进，首先寻找中间点对脉冲进行整形，测量整形后 脉冲的周期，然而程序中 coe 文件的极值不统一，因此整形的时候要针对不同的情况使用不 同的时钟，在综合时发现，该方案报了错误 ambigious clock，后咨询老师与专业工程师，此 类错误原因就是时钟使用过多，且内部模块结构相对复杂，因此第二种方案不采用。第三种 方案则是在第二种方案的基础上再次做出改进，直接利用最高位变化的次数进行测量，相比 于第二种方案的具体数值，最高位相对具有统一性，而且对于不同位数的最高位，可将其集 中在同一个时钟当中，经过仿真，该方案可行性较好。
+
+			针对方案三，确定了选择最高位作为关键突变点，下面需要根据这一突变点来确定测 频的逻辑。我们的思路就是要测量 1 秒钟内该突变点突变的次数，所以首要问题，就是测量 的触发时钟选择突变点作为时钟还是 0.5Hz 作为触发时钟。若选择 0.5Hz 时钟作为触发时钟， 我们在书写时，将根据时钟上升沿来判断，但是上升沿只会在一瞬间到达，而在这一瞬间不 一定会有脉冲，所以不能使用 0.5Hz 作为触发时钟。选择突变点作为触发时钟，如果发生突 变的时候，0.5Hz 时钟的值为 1，则计数一次，否则不计数，这一方案则可以完美契合我们 的预想功能。因此我们书写程序时采用上述方案。和前面的理论模块一样，这里同样在这一模块中采用了求余方法获取实际测频的各个数位。
+
+			根据上面的设计方案和时序图编写程序，具体程序如下所示:
+			\begin{lstlisting}[language=Verilog]
+			module real_freq(
+				input clk,
+				input[7:0] wave,
+				output reg[3:0] thou_count,
+				output reg[3:0] hund_count,
+				output reg[3:0] ten_count,
+				output reg[3:0] one_count
+				);
+				reg[19:0] freq_tmp;
+			\end{lstlisting}
+			\begin{lstlisting}[language=Verilog]
+				reg[19:0] freq_count;
+				reg half;
+				initial
+				begin
+					freq_count <= 20'd0;
+					freq_tmp <= 20'd0;
+				end
+			
+				always@(*)
+				begin
+					if(wave <= 8'd127)
+					begin
+						half <= 1'b0;
+					end
+					else
+					begin
+						half <= 1'b1;
+					end
+				end
+			
+				always@(posedge half)
+				begin
+					if(clk == 0)
+					begin
+						freq_tmp <= freq_tmp + 1;
+					end
+					else
+					begin
+						if(freq_tmp != 0)
+						begin
+							freq_count <= freq_tmp;
+						end
+						freq_tmp <= 0;
+					end
+			\end{lstlisting}
+			\begin{lstlisting}[language=Verilog]
+				end
+			
+				always@(negedge clk)
+				begin
+					one_count <= freq_count % 10;
+					ten_count <= (freq_count / 10) % 10;
+					hund_count <= (freq_count / 100) % 10;
+					thou_count <= freq_count / 1000;
+				end
+			
+			endmodule
+			\end{lstlisting}
+
+			仿真程序如下所示:
+
+			\begin{lstlisting}[language=Verilog]
+			module real_freq_sim;
+			reg[11:0] ctl;
+			wire[7:0] sine;
+			wire clk_10khz;
+			wire clk_05hz;
+			wire[3:0] thou;
+			wire[3:0] hund;
+			wire[3:0] ten;
+			wire[3:0] one;
+			// clockgen 100mhz
+			reg clk = 0;
+			parameter period_clk = 10;
+			always begin
+				#(period_clk/2) clk <= 1'b0;
+				#(period_clk/2) clk <= 1'b1;
+			end
+			initial begin
+				ctl = 12'd100;
+			end
+			\end{lstlisting}
+			\begin{lstlisting}[language=Verilog]
+			divclk divclk_tb(
+				.clk(clk), 
+				.out_clk3(clk_10khz),
+				.out_clk4(clk_05hz)
+				);
+			full_adder full_adder_tb(
+				.clk(clk_10khz),
+				.freq_ctl(ctl),
+				.sine_wave(sine)
+				);
+			real_freq real_freq_tb(
+				.clk(clk_05hz),
+				.wave(sine),
+				.thou_count(thou),
+				.hund_count(hund),
+				.ten_count(ten),
+				.one_count(one)
+				);
+			endmodule
+			\end{lstlisting}
+
+			利用 Xilinx Vivado 人为操控时钟和0.5Hz时钟进行仿真，可得到下图所示的结果:
+			\newline
+			\begin{figure}[htbp]
+				\centering
+				\includegraphics[width=0.72\textwidth]{figure/real_freq_sim.jpg}
+				\caption{测频模块仿真结果}\label{fig:real_freq_sim}
+			\end{figure}
+
+		\subsection{显示模块的程序编写}
+			显示模块的功能就是把各个位显示到对应的数码管上，其中理论值显示在左侧 4 位，实际值显示在右侧 4 位。
+
+			由于显示模块的管脚分配十分特殊，4 个数码管为一组，分 2 组控制，因此如果采用分位静态显示的方法会发生引脚配置不够的问题，因此这里采用动态扫描的方法。由于 4 个数码管用一组管脚控制，因此无法保证四个数码管一起显示。但是模块设置的输入为各个 位数据一起输入，因此这里我采用视觉暂留原理，以系统时钟作为模块的启动时钟，这样每 个数位亮起来的时候间隔仅为 10-8 秒，基本可以忽略，人眼认为是同时亮起，同时这一设计 也实现了并行输入到模块中的数据串行输出。因此这里采用上述动态扫描方法。
+
+			根据上面方案使用 Verilog HDL 语言编写出程序如下:
+			\begin{lstlisting}[language=Verilog]
+			module seg_ctl(
+				input clk, // 1khz clock
+				input[31:0] disp_data_pool, // 8*4
+				output reg[7:0] seg0, // left
+				output reg[7:0] seg1, // right
+				output reg[7:0] seg_flag // seg choose
+				);
+				reg[3:0] disp_data; // the data needed to display
+				reg[2:0] dyn_disp_flag; // dynamic refresh
+				// initialization
+				initial
+				begin
+					seg0 = 0;
+					seg1 = 0;
+					seg_flag = 8'b00000001; // which seg to display
+					disp_data = 0;
+					dyn_disp_flag = 0;
+				end
+				// dynamic refresh
+				always@(posedge clk)
+				begin
+					dyn_disp_flag <= dyn_disp_flag + 1;
+					case (dyn_disp_flag)
+			\end{lstlisting}
+			\begin{lstlisting}[language=Verilog]
+						3'b000:
+						begin
+						disp_data <= disp_data_pool[3:0];
+						seg_flag <= 8'b00000001;
+						end
+						3'b001:
+						begin
+						disp_data <= disp_data_pool[7:4];
+						seg_flag <= 8'b00000010;
+						end
+						3'b010:
+						begin
+						disp_data <= disp_data_pool[11:8];
+						seg_flag <= 8'b00000100;
+						end
+						3'b011:
+						begin
+						disp_data <= disp_data_pool[15:12];
+						seg_flag <= 8'b00001000;
+						end
+						3'b100:
+						begin
+						disp_data <= disp_data_pool[19:16];
+						seg_flag <= 8'b00010000;
+						end
+						3'b101:
+						begin
+						disp_data <= disp_data_pool[23:20];
+						seg_flag <= 8'b00100000;
+						end
+						3'b110:
+						begin
+						disp_data <= disp_data_pool[27:24];
+						seg_flag <= 8'b01000000;
+						end
+			\end{lstlisting}
+			\begin{lstlisting}[language=Verilog]
+						3'b111:
+						begin
+						disp_data <= disp_data_pool[31:28];
+						seg_flag <= 8'b10000000;
+						end
+						default:
+						begin
+						disp_data <= 0;
+						seg_flag <= 8'b00000000;
+						end
+					endcase
+				end
+			
+				always@(seg_flag)
+				begin
+					if (seg_flag > 8'b00001000)
+					begin
+					case (disp_data)
+						4'h0 : seg0 <= 8'hfc;
+						4'h1 : seg0 <= 8'h60;
+						4'h2 : seg0 <= 8'hda;
+						4'h3 : seg0 <= 8'hf2;
+						4'h4 : seg0 <= 8'h66;
+						4'h5 : seg0 <= 8'hb6;
+						4'h6 : seg0 <= 8'hbe;
+						4'h7 : seg0 <= 8'he0;
+						4'h8 : seg0 <= 8'hfe;
+						4'h9 : seg0 <= 8'hf6;
+						4'ha : seg0 <= 8'hee;
+						4'hb : seg0 <= 8'h3e;
+						4'hc : seg0 <= 8'h9c;
+						4'hd : seg0 <= 8'h7a;
+						4'he : seg0 <= 8'h9e;
+						4'hf : seg0 <= 8'h8e;
+					endcase
+			\end{lstlisting}
+			\begin{lstlisting}[language=Verilog]
+					end
+					else
+					begin
+					case (disp_data)
+						4'h0 : seg1 <= 8'hfc;
+						4'h1 : seg1 <= 8'h60;
+						4'h2 : seg1 <= 8'hda;
+						4'h3 : seg1 <= 8'hf2;
+						4'h4 : seg1 <= 8'h66;
+						4'h5 : seg1 <= 8'hb6;
+						4'h6 : seg1 <= 8'hbe;
+						4'h7 : seg1 <= 8'he0;
+						4'h8 : seg1 <= 8'hfe;
+						4'h9 : seg1 <= 8'hf6;
+						4'ha : seg1 <= 8'hee;
+						4'hb : seg1 <= 8'h3e;
+						4'hc : seg1 <= 8'h9c;
+						4'hd : seg1 <= 8'h7a;
+						4'he : seg1 <= 8'h9e;
+						4'hf : seg1 <= 8'h8e;
+					endcase
+					end
+				end
+			endmodule
+			\end{lstlisting}
+			因为程序在仿真中比较难进行结果确认，所以直接烧录测试，测试后模块功能运行正常，可以正常使用。
+		\subsection{按键输入模块编写}
+			按键消抖通常的按键所用开关为机械弹性开关，当机械触点断开、闭合时，由于机械触点的弹性作用，一个按键开关在闭合时不会马上稳定地接通，在断开时也不会一下子断开。因而在闭合及断开的瞬间均伴随有一连串的抖动，为了不产生这种现象而作的措施就是按键消抖。
+
+			在本模块中，利用了一个深度为3的移位寄存器，该移位寄存器由一个中速时钟($T=20ms$)驱动，结合现在和过去的两个状态来判断按键是否被按下，同时带有一个边缘检测，只会在按键按下的瞬间发送有效信号，按键一直按下不会保持输出有效信号。
+
+			根据上面原理使用 Verilog HDL 语言编写出程序如下:
+			\begin{lstlisting}[language=Verilog]
+			module key_read(
+				input clk,
+				input[5:0] btn_input,//5 buttons + 1 reset
+				output[5:0] btn_output
+				);
+
+				// button initialization
+				reg[5:0] btn_status_0 = 0;
+				reg[5:0] btn_status_1 = 0;
+				reg[5:0] btn_status_2 = 0;
+				// btn_out
+				assign btn_output = (btn_status_2 & btn_status_1 & ~btn_status_0) | (btn_status_2 & btn_status_1 & btn_status_0) | (~btn_status_2 & btn_status_1 & btn_status_0);
+				
+				// status passer
+				always @(posedge clk)
+				begin
+					btn_status_0 <= btn_input;
+					btn_status_1 <= btn_status_0;
+					btn_status_2 <= btn_status_1;
+				end
+			endmodule
+			\end{lstlisting}
+
+			因为程序在仿真中比较难进行结果确认，所以直接烧录测试，测试后模块功能运行正常，可以正常使用。
+	\section{正弦波 AM 调制部分的编写}
+		\subsection{分频模块需求分析}
+			AM 调制和前面的 DDS 一样，考虑到示波器条件限制，因此我们将会采用分频模块，程序与前面的分频部分相同，因此这里不再赘 述。
+		\subsection{AM调制模块编写}
+			从 AM 调制的原理可以看出，AM 调制需要产生频率较大的载波信号和频率较小的传 输信号，参考 DDS 设计部分，这里采用与 DDS 产生正弦波形相同的原理进行编写，即使用 IP 核、对应的 coe 文件和频率控制字来生成对应的波形。通过上面
+			的方案，我们可以产生 2 种频率的正弦波。
+
+			生成正弦波的代码如下所示:
+			\begin{lstlisting}[language=Verilog]
+			module am_gen(
+				input clk,
+				output signed[7:0] sin_s,
+				output signed[7:0] sin_c
+				);
+
+				parameter freq_s = 7'd64;
+				parameter freq_c = 11'd1920;
+				parameter cnt_width = 8'd15;
+				
+				reg [cnt_width-1:0] cnt_s;
+				reg [cnt_width-1:0] cnt_c;
+
+				wire [11:0] addr_s;
+				wire [11:0] addr_c;
+
+				wire signed[7:0] raw_s;
+				wire signed[7:0] raw_c;
+
+				initial
+				begin
+					cnt_s = 0;
+					cnt_c = 0;
+				end
+
+				always @(posedge clk) 
+				begin
+			\end{lstlisting}
+			\begin{lstlisting}[language=Verilog]
+					cnt_s <= cnt_s + freq_s;
+					cnt_c <= cnt_c + freq_c; 
+				end
+
+				assign addr_s = cnt_s[cnt_width-1:cnt_width-12]; 
+				assign addr_c = cnt_c[cnt_width-1:cnt_width-12]; 
+
+				assign sin_s = raw_s + 8'd128;
+				assign sin_c = raw_c + 8'd128;
+
+				sine_rom sine_am_s(
+					.a(addr_s),
+					.clk(clk),
+					.spo(raw_s)
+				);
+
+				sine_rom sine_am_c(
+					.a(addr_c),
+					.clk(clk),
+					.spo(raw_c)
+				);
+
+			endmodule
+			\end{lstlisting}
+
+			仿真程序如下所示：
+
+			\begin{lstlisting}[language=Verilog]
+			module am_gen_sim;
+
+			wire[7:0] ss;
+			wire[7:0] sc;
+			
+			// clockgen 10khz
+			reg clk = 0;
+			parameter period_clk = 10000;
+			\end{lstlisting}
+			\begin{lstlisting}[language=Verilog]
+			always
+			begin
+				#(period_clk/2) clk <= 1'b0;
+				#(period_clk/2) clk <= 1'b1;
+			end
+			
+			am_gen am_gen_tb(
+				.clk(clk),
+				.sin_s(ss),
+				.sin_c(sc)
+			);
+			endmodule
+			\end{lstlisting}
+
+			利用 Xilinx Vivado 人为输入时钟进行仿真，可得到下图所示的结果：
+			\newline
+			\begin{figure}[htbp]
+				\centering
+				\includegraphics[width=0.95\textwidth]{figure/am_gen_sim.jpg}
+				\caption{AM调制正弦波生成仿真结果}\label{fig:am_gen_sim}
+			\end{figure}
+
+			然后我们需要将 2 个正弦波进行相乘运算，这里我们使用系统自带的乘法器 IP 核来
+			完成运算。IP 核调用方式与产生波形的 ROM 的调用方式相同，其具体参数如下所示:
+			\newpage
+			\begin{figure}[htbp]
+				\centering
+				\includegraphics[width=0.75\textwidth]{figure/mult_setting.jpg}
+				\caption{A乘法器 IP 核配置}\label{fig:mult_setting}
+			\end{figure}
+
+			生成乘法器 IP 核后，相乘可以得到一个位宽为 16 的数，后经过转换可以输出模拟的正弦波形。
+
+			然而，由于我们的 DAC 模块只能输出 8 位无符号数，因此为保证波形能够在示波器上面正常输出，我们将最后得到的 16 位数据取高 8 位输入到 DAC 模块中，低八位数据舍 掉作为误差。但是前面的高八位仍旧为有符号数，所以需要做一个有符号数转无符号数的转 换。我们知道，8 位有符号数的最小值为-128，最大值为+127，因此转换时我们只需要加 128 即可将其范围转换为 0-255，刚好为无符号 8 位数的范围。
+
+			该方案的构思电路图如下所示：
+			\newline
+			\begin{figure}[htbp]
+				\centering
+				\includegraphics[width=1\textwidth]{figure/am_top_stru.jpg}
+				\caption{AM 调制部分的电路构思图设计}\label{fig:am_top_stru}
+			\end{figure}
+
+			根据上面的设计思想和构思图，我们可以编写出可以在世博器上面输出调制波形的顶 层模块的程序如下所示:
+			\newpage
+			\begin{lstlisting}[language=Verilog]
+			module am_out(
+				input clk,
+				output reg[7:0] am_wave
+				);
+				wire[7:0] sc;
+				wire[7:0] ss;
+				wire[15:0] raw;
+				reg[7:0] raw_tmp;
+				am_gen am_gen_out(
+					.clk(clk),
+					.sin_s(ss),
+					.sin_c(sc)
+					);
+				mult mult_am(
+					.CLK(clk),
+					.A(ss),
+					.B(sc),
+					.P(raw)
+					);
+				always@(posedge clk)
+				begin
+					raw_tmp = raw[15:8];
+					am_wave = raw_tmp + 8'd128;
+				end
+			endmodule
+			\end{lstlisting}
+
+			其中时钟的大小为分频后的 10kHz。
+
+			仿真程序如下所示:
+			\begin{lstlisting}[language=Verilog]
+			module am_out_sim;
+
+			wire[7:0] out;
+			// clockgen 10khz
+			\end{lstlisting}
+			\begin{lstlisting}[language=Verilog]
+			reg clk = 0;
+			parameter period_clk = 10000;
+			always
+			begin
+				#(period_clk/2) clk <= 1'b0;
+				#(period_clk/2) clk <= 1'b1;
+			end
+			
+			am_out am_out_tb(
+				.clk(clk),
+				.am_wave(out)
+			);
+			endmodule
+			\end{lstlisting}
+
+			对上面的模块使用 Xilinx Vivado 自带仿真平台进行仿真，可以得到如下所示的波形:
+			\newline
+			\begin{figure}[htbp]
+				\centering
+				\includegraphics[width=0.95\textwidth]{figure/am_out_sim.jpg}
+				\caption{AM 调制仿真波形结果}\label{fig:am_out_sim}
+			\end{figure}
+
+			经过检验，上面波形满足程序预想的逻辑，而且输出的调制波形形状较为理想，后面将会把上面的程序烧入开发板进行验证。
+
+	\section{UART模块编写}
+		\subsection{UART数据处理的思路}
+
+		首先约定波特率，clk频率除以波特率为一帧所包含的时钟个数。其次是抓取起始位的边缘并对接收数据进行计数，之后由逻辑函数串行转并行，接收信号使用延迟两个时钟的d1，更稳定，防止亚稳态。
+		\subsection{UART接收模块}
+
+		原理在上文已经详细解释，这里不再赘述。
+		\begin{lstlisting}[language=Verilog]
+		module uart_rx(
+			input clk, // 100mhz clock
+			input uart_rxd, // raw data
+			output reg[7:0] uart_data,
+			output reg uart_rx_done
+			);
+		
+			reg uart_rxd_tmp0;
+			reg uart_rxd_tmp1;
+			reg rx_flag;
+			reg[3:0] rx_cnt;
+			reg[15:0] clk_cnt;
+			reg[7:0] rx_data;
+			reg[3:0] last_rx_cnt;
+			wire start;
+			// config
+			parameter CLK_FREQ = 100_000_000; 
+			parameter UATR_FREQ = 9600; 
+			parameter BSP_CNT = CLK_FREQ/UATR_FREQ;
+		
+			initial 
+			begin
+				rx_cnt = 0;
+				rx_flag = 0;
+				uart_rxd_tmp0 = 0;
+				uart_rxd_tmp1 = 0;
+		\end{lstlisting}
+		\begin{lstlisting}[language=Verilog]
+				clk_cnt = 0;
+				rx_data = 0;
+				last_rx_cnt = 0;
+				uart_rx_done = 0;
+			end
+		
+			// start
+			assign start = uart_rxd_tmp1 & (~uart_rxd_tmp0);
+			always @(posedge clk)
+			begin 
+				uart_rxd_tmp0 <= uart_rxd; 
+				uart_rxd_tmp1 <= uart_rxd_tmp0; 
+			end
+		
+			//rx_flag 
+			always @(posedge clk)
+			begin 
+				if(start)
+				begin
+					rx_flag <= 1'd1;
+				end
+				else if(rx_cnt == 4'd9 && clk_cnt == BSP_CNT/2 - 1'd1)
+				begin
+					rx_flag <= 1'd0; 
+				end
+			end
+		
+			// clk_cnt 
+			always @(posedge clk)
+			begin 
+				if (rx_flag)
+				begin 
+					if (clk_cnt < BSP_CNT - 1'd1)
+					begin
+						clk_cnt <= clk_cnt + 1'd1;
+		\end{lstlisting}
+		\begin{lstlisting}[language=Verilog]
+					end
+					else
+					begin
+						clk_cnt <= 16'd0; 
+					end
+				end 
+				else
+				begin
+					clk_cnt <= 16'd0;
+				end
+			end
+			
+			// rx_cnt
+			always @(posedge clk)
+			begin 
+				last_rx_cnt <= rx_cnt;
+				if (rx_flag)
+				begin 
+					if (clk_cnt == BSP_CNT - 1'd1)
+					begin
+						rx_cnt <= rx_cnt + 4'd1;
+					end
+				end 
+				else
+				begin
+					rx_cnt <= 4'd0;
+				end 
+			end
+		
+			// rx_data
+			always @(posedge clk)
+			begin 
+				if (rx_flag)
+				begin
+					if (clk_cnt == BSP_CNT/2)
+		\end{lstlisting}
+		\begin{lstlisting}[language=Verilog]
+					begin 
+						case(rx_cnt)
+							4'd1: rx_data[0] <= uart_rxd_tmp1; 
+							4'd2: rx_data[1] <= uart_rxd_tmp1; 
+							4'd3: rx_data[2] <= uart_rxd_tmp1; 
+							4'd4: rx_data[3] <= uart_rxd_tmp1; 
+							4'd5: rx_data[4] <= uart_rxd_tmp1; 
+							4'd6: rx_data[5] <= uart_rxd_tmp1; 
+							4'd7: rx_data[6] <= uart_rxd_tmp1; 
+							4'd8: rx_data[7] <= uart_rxd_tmp1;
+							default:; 
+						endcase
+					end
+				end
+				else
+				begin 
+					rx_data <= 8'd0;
+				end
+			end
+		
+			//rx_data 
+			always @(posedge clk)
+			begin 
+				if (rx_cnt == 4'd9 && last_rx_cnt != 4'd9)
+				begin 
+					uart_rx_done <= 1'd1;
+					uart_data <= rx_data;
+				end
+				else 
+				begin
+					uart_rx_done <= 1'd0;  
+					uart_data <= 0;
+				end
+			end
+		endmodule
+		\end{lstlisting}
+
+		接收控制模块编写：
+
+		\begin{lstlisting}[language=Verilog]
+		module recv_8byte(
+			input clk,
+			input bt_rxd,
+			output reg[31:0] data_32bit,
+			output refresh
+			);
+		
+			wire bt_rx_done;
+			wire[7:0] bt_recv_data;
+			reg[3:0] recv_data_cache;
+			reg test = 0;
+		
+			initial
+			begin
+				data_32bit = 32'd0;
+				recv_data_cache = 0;
+			end
+		
+			uart_rx uart_rx_bt(
+				.clk(clk),
+				.uart_rxd(bt_rxd),
+				.uart_data(bt_recv_data),
+				.uart_rx_done(bt_rx_done)
+				);
+		
+			assign refresh = bt_rx_done;
+		
+			always@(posedge clk)
+			begin
+				if (bt_rx_done == 1)
+				begin
+					case(bt_recv_data)
+						8'd48: recv_data_cache = 4'h0;
+		\end{lstlisting}
+		\begin{lstlisting}[language=Verilog]
+						8'd49: recv_data_cache = 4'h1;
+						8'd50: recv_data_cache = 4'h2;
+						8'd51: recv_data_cache = 4'h3;
+						8'd52: recv_data_cache = 4'h4;
+						8'd53: recv_data_cache = 4'h5;
+						8'd54: recv_data_cache = 4'h6;
+						8'd55: recv_data_cache = 4'h7;
+						8'd56: recv_data_cache = 4'h8;
+						8'd57: recv_data_cache = 4'h9;
+						default: recv_data_cache = 4'hf;
+					endcase
+		
+					data_32bit[31:28] <= data_32bit[27:24];
+					data_32bit[27:24] <= data_32bit[23:20];
+					data_32bit[23:20] <= data_32bit[19:16];
+					data_32bit[19:16] <= data_32bit[15:12];
+					data_32bit[15:12] <= data_32bit[11:8];
+					data_32bit[11:8] <= data_32bit[7:4];
+					data_32bit[7:4] <= data_32bit[3:0];
+					data_32bit[3:0] <= recv_data_cache;
+				end
+			end
+		endmodule
+		\end{lstlisting}
+
+		\subsection{UART发送模块编写}
+
+		原理在上文已经详细解释，这里不再赘述。
+		\begin{lstlisting}[language=Verilog]
+		module uart_tx(
+			input clk,
+			input[7:0] uart_data,
+			input uart_tx_en,
+			output reg uart_txd,
+			output uart_tx_busy,
+		\end{lstlisting}
+		\begin{lstlisting}[language=Verilog]
+			output uart_tx_active
+			);
+		
+			reg uart_en_tmp0;
+			reg uart_en_tmp1;
+			reg tx_flag;
+			reg[3:0] tx_cnt; // data being transmitted
+			reg[15:0] clk_cnt;
+			reg[7:0] tx_data; // a caching layer
+			wire start; // start transmission flag
+			parameter CLK_FREQ = 100_000_000; 
+			parameter UART_FREQ = 9600; 
+			parameter BSP_CNT = CLK_FREQ/UART_FREQ;
+		
+			// uart_tx_busy 
+			assign uart_tx_busy = tx_flag; 
+		
+			// start
+			assign start = uart_en_tmp0 & (~uart_en_tmp1);
+			assign uart_tx_active = start;
+			always@(posedge clk)
+			begin
+				uart_en_tmp0 <= uart_tx_en; 
+				uart_en_tmp1 <= uart_en_tmp0; 
+			end
+		
+			// clk_cnt 
+			always @(posedge clk)
+			begin 
+				if(tx_flag)
+				begin 
+					if(clk_cnt < BSP_CNT - 1'd1)
+					begin
+						clk_cnt <= clk_cnt + 1'd1;
+					end
+		\end{lstlisting}
+		\begin{lstlisting}[language=Verilog]
+					else
+					begin
+						clk_cnt <= 16'd0;
+					end 
+				end 
+				else 
+					clk_cnt <= 16'd0; 
+			end
+		
+			// tx_cnt 
+			always @(posedge clk)
+			begin 
+				if(tx_flag)
+				begin 
+					if(clk_cnt == BSP_CNT - 1'd1)
+					begin
+						tx_cnt <= tx_cnt + 4'd1;
+					end
+				end 
+				else
+				begin
+					tx_cnt <= 4'd0;
+				end
+			end
+			// uart_txd 
+			always @(posedge clk)
+			begin 
+				if(tx_flag)
+				begin
+				case(tx_cnt) 
+					4'd0: uart_txd <= 1'd0; 
+					4'd1: uart_txd <= tx_data[0]; 
+					4'd2: uart_txd <= tx_data[1]; 
+					4'd3: uart_txd <= tx_data[2]; 
+					4'd4: uart_txd <= tx_data[3];
+		\end{lstlisting}
+		\begin{lstlisting}[language=Verilog]
+					4'd5: uart_txd <= tx_data[4]; 
+					4'd6: uart_txd <= tx_data[5]; 
+					4'd7: uart_txd <= tx_data[6]; 
+					4'd8: uart_txd <= tx_data[7]; 
+					4'd9: uart_txd <= 1'd1; 
+					default: uart_txd <= 1'd1; 
+					endcase
+				end 
+				else 
+					uart_txd <= 1'd1;
+			end
+		
+			//tx_data tx_flag 
+			always @(posedge clk)
+			begin 
+				if(start == 1'b1)
+				begin 
+					tx_data <= uart_data; 
+					tx_flag <= 1'b1; 
+				end 
+				else if ((tx_cnt == 4'd9) && (clk_cnt == BSP_CNT -1'd1))
+				begin 
+					tx_flag <= 1'b0; 
+					tx_data <= 8'd0; 
+				end 
+			end
+		endmodule
+		\end{lstlisting}
+
+		接收控制模块编写：
+
+		\begin{lstlisting}[language=Verilog]
+		module send_8byte(
+			input clk,
+			input en,
+			input[63:0] ascii_data,
+		\end{lstlisting}
+		\begin{lstlisting}[language=Verilog]
+			output bt_txd,
+			output reg done
+			);
+		
+			reg bt_tx_en;
+			wire bt_tx_busy;
+			wire bt_tx_active;
+			reg[3:0] send_count = 4'd0;
+			reg[7:0] bt_send_data;
+			reg clear;
+			reg en_tmp0;
+			reg en_tmp1;
+			wire start;
+			reg send_flag;
+		
+			uart_tx uart_tx_bt(
+				.clk(clk),
+				.uart_data(bt_send_data),
+				.uart_tx_en(bt_tx_en),
+				.uart_txd(bt_txd),
+				.uart_tx_busy(bt_tx_busy),
+				.uart_tx_active(bt_tx_active)
+				);
+		
+			assign start = en_tmp0 & (~en_tmp1);
+			always@(posedge clk)
+			begin
+				en_tmp0 <= en; 
+				en_tmp1 <= en_tmp0; 
+			end
+		
+			always@(posedge clk)
+			begin
+				if (start == 1'b1)
+				begin
+		\end{lstlisting}
+		\begin{lstlisting}[language=Verilog]
+					send_flag <= 1'b1;
+				end
+				else if (done == 1)
+				begin
+					send_flag <= 1'b0;
+				end
+			end
+		
+			always@(negedge bt_tx_busy or posedge done)
+			begin
+				if (send_count < 4'd8)
+				begin
+					send_count <= send_count + 4'd1;
+				end
+				if (done == 1)
+				begin
+					send_count <= 0;
+				end
+			end
+		
+			always@(posedge clk)
+			begin
+				if (send_flag == 1)
+				begin
+					if (bt_tx_busy == 0 && done == 0)
+					begin
+						case(send_count)
+							4'd0: 
+							begin
+								bt_tx_en <= 1;
+								bt_send_data <= ascii_data[63:56];
+								done <= 0;
+							end
+							4'd1:
+							begin
+		\end{lstlisting}
+		\begin{lstlisting}[language=Verilog]
+								bt_tx_en <= 1;
+								bt_send_data <= ascii_data[55:48];
+								done <= 0;
+							end
+							4'd2:
+							begin
+								bt_tx_en <= 1;
+								bt_send_data <= ascii_data[47:40];
+								done <= 0;
+							end
+							4'd3: 
+							begin
+								bt_tx_en <= 1;
+								bt_send_data <= ascii_data[39:32];
+								done <= 0;
+							end
+							4'd4: 
+							begin
+								bt_tx_en <= 1;
+								bt_send_data <= ascii_data[31:24];
+								done <= 0;
+							end
+							4'd5: 
+							begin
+								bt_tx_en <= 1;
+								bt_send_data <= ascii_data[23:16];
+								done <= 0;
+							end
+							4'd6: 
+							begin
+								bt_tx_en <= 1;
+								bt_send_data <= ascii_data[15:8];
+								done <= 0;
+							end
+							4'd7: 
+		\end{lstlisting}
+		\begin{lstlisting}[language=Verilog]
+							begin
+								bt_tx_en <= 1;
+								bt_send_data <= ascii_data[7:0];
+								done <= 0;
+							end
+							4'd8:
+							begin
+								done <= 1;
+								bt_tx_en <= 0;
+								clear <= 1;
+							end
+						endcase
+					end
+					else
+					begin
+						bt_tx_en <= 0;
+					end
+				end
+				else
+				begin
+					if (done != 0)
+					begin
+						done <= 0;
+					end
+				end
+			end
+		endmodule
+		\end{lstlisting}
+		\subsection{UART顶层模块编写}
+		\begin{figure}[htbp]
+			\centering
+			\includegraphics[width=0.5\textwidth]{figure/uart_top.jpg}
+			\caption{UART顶层模块结构}\label{fig:uart_top}
+		\end{figure}
+		\newpage
+		控制代码如下，发送成功后会回传"Success!"字符串。RTL结构图如上：
+
+		Verilog HDL代码如下：
+		\begin{lstlisting}[language=Verilog]
+		module bt_recv_response(
+			input clk,
+			input bt_rxd,
+			output[31:0] bt_recv_data,
+			output bt_txd
+			);
+		
+			reg last_recv_data;
+			reg[63:0] send_data;
+			reg send_en;
+			wire send_done;
+			wire data_refresh;
+		
+			initial 
+			begin
+				last_recv_data = 0;
+				send_en = 0;
+				//Success!
+				send_data[63:56] = 8'd83;
+				send_data[55:48] = 8'd117;
+				send_data[47:40] = 8'd99;
+				send_data[39:32] = 8'd99;
+				send_data[31:24] = 8'd101;
+				send_data[23:16] = 8'd115;
+				send_data[15:8] = 8'd115;
+				send_data[7:0] = 8'd33;
+			end
+		
+			recv_8byte bt_recv_8byte(
+				.clk(clk),
+				.bt_rxd(bt_rxd),
+				.data_32bit(bt_recv_data),
+		\end{lstlisting}
+		\begin{lstlisting}[language=Verilog]
+				.refresh(data_refresh)
+				);
+		
+			send_8byte bt_send_8byte(
+				.clk(clk)
+				.en(send_en),
+				.ascii_data(send_data),
+				.bt_txd(bt_txd),
+				.done(send_done)
+				);
+		
+			always@(posedge clk)
+			begin
+				send_en = data_refresh;
+			end
+		endmodule
+		\end{lstlisting}
+	\section{顶层逻辑代码}
+		\subsection{实现功能}
+		\begin{enumerate}
+			\item 利用右侧上下左右按钮实现数值/位切换
+			\item 利用右侧中间按钮实现波形切换
+			\item 利用reset按钮实现模式的切换
+			\item 利用右侧的LED灯实现模型的显示
+			\item 利用左侧拨码开关实现输入模式的切换
+			\item 利用左侧的LED灯指示位数和波形
+		\end{enumerate}
+		\subsection{Verilog HDL代码}
+		\begin{lstlisting}[language=Verilog]
+		module top_dynamic(
+			input clk,
+			input[5:0] btn_in,
+			input[7:0] switch,
+			input burx,
+			input surx,
+		\end{lstlisting}
+		\begin{lstlisting}[language=Verilog]
+			output[7:0] seg0,
+			output[7:0] seg1,
+			output[7:0] seg_flag,
+			output[7:0] LED0,
+			output[7:0] LED1,
+			output[7:0] toDAC,
+			output DAC_ILE,
+			output DAC_CS,
+			output DAC_WR1,
+			output DAC_WR2,
+			output DAC_XFER,
+			output butx,
+			output sutx,
+			output reg bt_master=1 , bt_sw_hw=0 , bt_rst=1 , bt_sw=1 , bt_pw=1
+			);
+		
+			reg[5:0] btn_seg_flag;
+			reg freq_ctl_flag;
+			reg[31:0] num_data_pool;
+		
+			reg[1:0] adjust_ctl_flag;
+		
+			// DAC param initialization
+			assign DAC_ILE = 1;
+			assign DAC_CS = 0;
+			assign DAC_WR1 = 0;
+			assign DAC_WR2 = 0;
+			assign DAC_XFER = 0;
+		
+			// clock divider
+			wire clk_1ms;
+			wire clk_20ms;
+			wire clk_10khz;
+			wire clk_05hz;
+		
+			divclk divclk_dds(
+			\end{lstlisting}
+			\begin{lstlisting}[language=Verilog]
+				.clk(clk),
+				.out_clk1(clk_1ms),
+				.out_clk2(clk_20ms),
+				.out_clk3(clk_10khz),
+				.out_clk4(clk_05hz)
+				);
+			
+			// button input
+			wire[5:0] btn_out;
+		
+			key_read keyread_dds(
+				.clk(clk_20ms),
+				.btn_input(btn_in),
+				.btn_output(btn_out)
+				);
+		
+			// display
+			wire[31:0] disp_data_pool;
+			seg_ctl seg_ctl_dds(
+				.clk(clk_1ms),
+				.disp_data_pool(disp_data_pool),
+				.seg0(seg0),
+				.seg1(seg1),
+				.seg_flag(seg_flag)
+				);
+		
+			wire dac_mode;
+			wire dds_clk;
+			wire am_clk;
+		
+			assign dds_clk = clk_10khz & dac_mode;
+			assign am_clk = clk_10khz & (~dac_mode);
+		
+			// dds
+			wire[1:0] wave_select;
+			wire[11:0] freq_ctl;
+		\end{lstlisting}
+		\begin{lstlisting}[language=Verilog]
+			wire[7:0] dds_mux;
+		
+			wave_out wave_out_dds(
+				.clk(dds_clk),
+				.wave_selector(wave_select),
+				.freq_ctl(freq_ctl),
+				.output_wave(dds_mux)
+				);
+		
+			// am
+			wire[7:0] am_mux;
+			am_out am_out_dynamic(
+				.clk(am_clk),
+				.am_wave(am_mux)
+				);
+		
+			// dac mux
+			dac_mux dac_mux_dynamic(
+				.mode(dac_mode),
+				.am(am_mux),
+				.dds(dds_mux),
+				.dac(toDAC)
+				);
+		
+			// theoretical frequency & real frequency display data to display
+			wire[31:0] freq_data_pool;
+		
+			freq_embed freq_embed_dds(
+				.clk_10k(clk_10khz),
+				.clk_05(clk_05hz),
+				.wave_in(toDAC),
+				.freq_ctl(freq_ctl),
+				.freq_data(freq_data_pool)
+				);
+		
+			// process freq_ctl_data that needed to display
+		\end{lstlisting}
+		\begin{lstlisting}[language=Verilog]
+			wire[31:0] freq_ctl_data_pool;
+		
+			freq_ctl_data freq_ctl_data_dds(
+				.clk(clk_10khz),
+				.freq_ctl(freq_ctl),
+				.freq_ctl_data(freq_ctl_data_pool)
+				);
+		
+			// uart mux
+			wire uart_rx;
+			wire uart_tx;
+			wire uart_mode;
+		
+			uart_mux uart_mux_dynamic(
+				.mode(uart_mode),
+				.rx(uart_rx),
+				.tx(uart_tx),
+				.bt_rx(burx),
+				.bt_tx(butx),
+				.serial_rx(surx),
+				.serial_tx(sutx)
+				);
+			
+			// uart
+			wire[31:0] uart_recv_data;
+			bt_recv_response bt_recv_response_dynamic(
+				.clk(clk),
+				.bt_rxd(uart_rx),
+				.bt_recv_data(uart_recv_data),
+				.bt_txd(uart_tx)
+				);
+		
+			// main control function
+			dynamic_ctl dynamic_ctl_dds(
+				.clk_10khz(clk_10khz),
+				.to_DAC(toDAC),
+		\end{lstlisting}
+		\begin{lstlisting}[language=Verilog]
+				.btn_value(btn_out),
+				.switch(switch),
+				.freq_data_pool(freq_data_pool),
+				.freq_ctl_data_pool(freq_ctl_data_pool),
+				.uart_recv_data(uart_recv_data),
+				.LED0(LED0),
+				.LED1(LED1),
+				.wave_select(wave_select),
+				.dac_mode(dac_mode),
+				.uart_mode(uart_mode),
+				.freq_ctl(freq_ctl),
+				.data(disp_data_pool)
+				);
+		endmodule
+		\end{lstlisting}
+\end{spacing}}

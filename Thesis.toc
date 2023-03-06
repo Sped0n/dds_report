@@ -1,0 +1,52 @@
+\contentsline {chapter}{\numberline {1\hspace {.3em}}设计概述}{1}{}%
+\contentsline {section}{\numberline {1.1}设计目的}{1}{}%
+\contentsline {section}{\numberline {1.2}应用领域}{1}{}%
+\contentsline {section}{\numberline {1.3}设计要求和性能指标}{1}{}%
+\contentsline {section}{\numberline {1.4}设计优点}{1}{}%
+\contentsline {chapter}{\numberline {2\hspace {.3em}}方案整体性论述}{2}{}%
+\contentsline {section}{\numberline {2.1}DDS 组成及相关工作原理介绍}{2}{}%
+\contentsline {subsection}{\numberline {2.1.1}DDS工作原理}{2}{}%
+\contentsline {subsection}{\numberline {2.1.2}AM调制原理}{3}{}%
+\contentsline {section}{\numberline {2.2}UART工作原理}{3}{}%
+\contentsline {subsection}{\numberline {2.2.1}波特率}{4}{}%
+\contentsline {subsection}{\numberline {2.2.2}传输格式}{4}{}%
+\contentsline {subsection}{\numberline {2.2.3}校验位}{4}{}%
+\contentsline {subsection}{\numberline {2.2.4}start和stop的产生}{5}{}%
+\contentsline {section}{\numberline {2.3}实验总体方案}{5}{}%
+\contentsline {subsection}{\numberline {2.3.1}实验计划使用模块的确定}{5}{}%
+\contentsline {subsection}{\numberline {2.3.2}实验RTL级设计图}{6}{}%
+\contentsline {chapter}{\numberline {3\hspace {.3em}}各子模块功能的编写}{7}{}%
+\contentsline {section}{\numberline {3.1}DDS子模块的编写}{7}{}%
+\contentsline {subsection}{\numberline {3.1.1}分频模块的编写}{7}{}%
+\contentsline {subsection}{\numberline {3.1.2}累加和波形产生模块的编写}{10}{}%
+\contentsline {subsection}{\numberline {3.1.3}波形输出模块的编写}{12}{}%
+\contentsline {subsection}{\numberline {3.1.4}理论频率值计算模块的编写}{15}{}%
+\contentsline {subsection}{\numberline {3.1.5}测频模块程序的书写}{17}{}%
+\contentsline {subsection}{\numberline {3.1.6}显示模块的程序编写}{22}{}%
+\contentsline {subsection}{\numberline {3.1.7}按键输入模块编写}{25}{}%
+\contentsline {section}{\numberline {3.2}正弦波 AM 调制部分的编写}{26}{}%
+\contentsline {subsection}{\numberline {3.2.1}分频模块需求分析}{26}{}%
+\contentsline {subsection}{\numberline {3.2.2}AM调制模块编写}{27}{}%
+\contentsline {section}{\numberline {3.3}UART模块编写}{33}{}%
+\contentsline {subsection}{\numberline {3.3.1}UART数据处理的思路}{33}{}%
+\contentsline {subsection}{\numberline {3.3.2}UART接收模块}{33}{}%
+\contentsline {subsection}{\numberline {3.3.3}UART发送模块编写}{38}{}%
+\contentsline {subsection}{\numberline {3.3.4}UART顶层模块编写}{45}{}%
+\contentsline {section}{\numberline {3.4}顶层逻辑代码}{47}{}%
+\contentsline {subsection}{\numberline {3.4.1}实现功能}{47}{}%
+\contentsline {subsection}{\numberline {3.4.2}Verilog HDL代码}{47}{}%
+\contentsline {chapter}{\numberline {4\hspace {.3em}}程序综合及烧录}{53}{}%
+\contentsline {section}{\numberline {4.1}RTL级检查}{53}{}%
+\contentsline {section}{\numberline {4.2}硬件管教配置以及综合}{53}{}%
+\contentsline {section}{\numberline {4.3}烧录结果}{59}{}%
+\contentsline {chapter}{\numberline {5\hspace {.3em}}实验感想及总结}{62}{}%
+\contentsline {section}{\numberline {5.1}实验中遇到的问题以及解决方法}{62}{}%
+\contentsline {subsection}{\numberline {5.1.1}实验初期发现示波器无波形显示且仿真正常}{62}{}%
+\contentsline {subsection}{\numberline {5.1.2}实验代码出现时序冲突}{62}{}%
+\contentsline {section}{\numberline {5.2}实验收获与感受}{62}{}%
+\contentsline {subsection}{\numberline {5.2.1}实验硬件和软件使用感受}{62}{}%
+\contentsline {subsection}{\numberline {5.2.2}实验收获与自身编程感受}{62}{}%
+\contentsline {subsection}{\numberline {5.2.3}实验总结}{63}{}%
+\contentsline {chapter}{致谢}{64}{}%
+\contentsline {chapter}{参考文献}{65}{}%
+\contentsfinish 
